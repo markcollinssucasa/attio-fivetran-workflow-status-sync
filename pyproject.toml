@@ -1,0 +1,23 @@
+[project]
+name = "attio-note-ai"
+version = "0.1.0"
+description = "CLI to fetch Attio notes for a record and summarize them with OpenAI"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27.0",
+    "google-genai>=1.31.0",
+    "typer[all]>=0.12.5",
+    "questionary>=2.0.1",
+    "pydantic>=2.8.2",
+    "rich>=13.7.1",
+    "python-dotenv>=1.0.1",
+    "isodate>=0.6.1",
+    "ruff>=0.12.10",
+]
+
+[project.scripts]
+attio-notes-summarize = "main:main"
+
+[tool.ruff]
+indent-width = 2
