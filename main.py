@@ -7,9 +7,9 @@ from pprint import pprint
 
 from dotenv import load_dotenv
 from pathlib import Path
-from atttio_client import AttioClient
-from attio_application import AttioApplicationRecord
-from attio_application_workflow_status_atttribute import AttioApplicationWorkflowStatusAttribute
+from attio_client import AttioClient
+from types.attio_application import AttioApplicationRecord
+from types.attio_application_workflow_status_atttribute import AttioApplicationWorkflowStatusAttribute
 
 def _load_env_files() -> None:
   """Load environment variables from .env in project root and/or CWD."""
