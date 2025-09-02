@@ -35,10 +35,10 @@ PY
 ### Quick smoke test (CLI)
 Print a few Attio application record IDs to verify auth and connectivity:
 ```bash
-python main.py
+python test_script.py
 ```
 Notes:
-- `main.py` uses hardcoded filter/limit for a simple sanity check.
+- `test_script.py` uses hardcoded filter/limit for a simple sanity check.
 - Ensure `ATTIO_API_TOKEN` is available in your shell or `.env`.
 
 ### Running the connector locally (debug mode)

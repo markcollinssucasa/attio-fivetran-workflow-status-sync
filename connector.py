@@ -3,10 +3,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from fivetran_connector_sdk import Connector
-
-# For enabling Logs in your connector code
-
-# For supporting Data operations like Upsert(), Update(), Delete() and checkpoint()
+from fivetran_connector_sdk import Logging as logging
 from fivetran_connector_sdk import Operations as op
 
 from attio_client import AttioClient
@@ -22,12 +19,14 @@ def validate_configuration(configuration: dict):
   if "attio_api_token" not in configuration:
     raise ValueError("Could not find 'attio_api_token'")
 
+
 def schema(configuration: dict):
-  
-  return [{
-    "table": "attio_workflow_status",
-    "primary_key": ["application_id"],
-  }]
+  return [
+    {
+      "table": "attio_workflow_status",
+      "primary_key": ["application_id"],
+    }
+  ]
 
 
 async def _update(configuration: dict, state: dict):
@@ -49,32 +48,53 @@ async def _update(configuration: dict, state: dict):
 
   attio_filter: dict[str, Any] = {}
   if last_sync is not None:
-    attio_filter = {"workflow_status": {"active_from": {"$gt": _iso(last_sync_with_buffer)}}}
+    attio_filter = {
+      "workflow_status": {"active_from": {"$gt": _iso(last_sync_with_buffer)}}
+    }
 
-  async with AttioClient(attio_token=token) as client:
-    attio_attribute_fetcher = AttioAttributeFetcher(
-      attio_client=client,
-      concurrency=10,
-      parent_object="applications",
-      attribute="workflow_status",
-      record_model=AttioApplicationRecord,
-      attribute_model=AttioApplicationWorkflowStatusAttribute,
-      filter=attio_filter,
-      limit=50,
-    )
-    async for rows in attio_attribute_fetcher.stream_attribute_values():
-      for row in rows.values:
-        op.upsert(
-          table="attio_workflow_status",
-          data=dict(application_id=rows.record_id, workflow_status=row.model_dump()),
-        )
+  try:
+    async with AttioClient(attio_token=token) as client:
+      attio_attribute_fetcher = AttioAttributeFetcher(
+        attio_client=client,
+        concurrency=10,
+        parent_object="applications",
+        attribute="workflow_status",
+        record_model=AttioApplicationRecord,
+        attribute_model=AttioApplicationWorkflowStatusAttribute,
+        filter=attio_filter,
+        limit=50,
+      )
+      async for rows in attio_attribute_fetcher.stream_attribute_values():
+        try:
+          op.upsert(
+            table="attio_workflow_status",
+            data=dict(
+              application_id=rows.record_id,
+              workflow_status=[row.model_dump() for row in rows.values],
+            ),
+          )
+        except Exception as err:
+          logging.warning(f"Upsert failed for application_id={rows.record_id}: {err}")
+          continue
+        logging.info(f"Data fetch loop successful for application_id={rows.record_id}")
+  except Exception as err:
+    logging.warning(f"Data fetch loop failed: {err}")
+    raise
 
-  state["last_sync"] = str(now)
-  op.checkpoint(state=state)
+  try:
+    state["last_sync"] = str(now)
+    op.checkpoint(state=state)
+  except Exception as err:
+    logging.warning(f"Checkpoint failed: {err}")
+    raise
 
 
 def update(configuration: dict, state: dict):
-  asyncio.run(_update(configuration, state))
+  try:
+    asyncio.run(_update(configuration, state))
+  except Exception as err:
+    logging.warning(f"Update run failed: {err}")
+    raise
 
 
 connector = Connector(update=update, schema=schema)
