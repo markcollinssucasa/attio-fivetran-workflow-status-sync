@@ -1,13 +1,22 @@
 import asyncio
 import sys
-from typing import Any, AsyncGenerator, Dict, List, Type, TypeVar, Generic, Optional
-from pydantic import BaseModel
+from dataclasses import dataclass
+from typing import Any, AsyncGenerator, Dict, Generic, Type, TypeVar
 
-from types.attio_application import AttioApplicationRecord
+from pydantic import BaseModel
+from rich import print as pprint
+
 from attio_client import AttioClient
+from attio_types.attio_application import AttioApplicationRecord
 
 RecordT = TypeVar("RecordT", bound=AttioApplicationRecord)
 AttributeT = TypeVar("AttributeT", bound=BaseModel)
+
+
+@dataclass
+class AttioAttributeFetcherResult[AttributeT]:
+  record_id: str
+  values: list[AttributeT]
 
 
 class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
@@ -19,9 +28,10 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
   record_model: Type[RecordT]
   attribute_model: Type[AttributeT]
   limit: int
-  filter: Dict[str, Any]  
-  _input_queue: asyncio.Queue[str | None]
-  _output_queue: asyncio.Queue[List[AttributeT] | None]
+  filter: Dict[str, Any]
+  _input_queue: asyncio.Queue[str | None] | None
+  _output_queue: asyncio.Queue[AttioAttributeFetcherResult[AttributeT] | None] | None
+  _is_running: bool
 
   """Concurrent attribute fetcher for Attio records.
 
@@ -50,10 +60,11 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
     self.attribute_model = attribute_model
     self.limit = limit
     self.filter = filter
-    self._input_queue = asyncio.Queue(maxsize=self.concurrency * 4)
-    self._output_queue = asyncio.Queue()
+    self._input_queue = None
+    self._output_queue = None
+    self._is_running = False
 
-  async def run(self) -> AsyncGenerator[List[AttributeT], None]:
+  async def stream_attribute_values(self) -> AsyncGenerator[AttioAttributeFetcherResult[AttributeT], None]:
     """Stream lists of attribute values as they are fetched.
 
     This implementation uses a simple async queue pipeline:
@@ -62,10 +73,13 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
     - Consumer (this generator): yields results from an output queue as ready
     """
     # Guard against concurrent runs
-    if self._input_queue is not None or self._output_queue is not None:
+    if self._is_running:
       raise RuntimeError(
         "Fetcher is already running; concurrent runs are not supported"
       )
+    self._is_running = True
+    self._input_queue = asyncio.Queue(maxsize=self.concurrency * 4)
+    self._output_queue = asyncio.Queue()
 
     num_workers = self.concurrency
 
@@ -88,6 +102,10 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
       except Exception:
         pass
       await asyncio.gather(*worker_tasks, return_exceptions=True)
+      # Reset state
+      self._is_running = False
+      self._input_queue = None
+      self._output_queue = None
 
   async def _producer(self) -> None:
     offset = 0
@@ -106,36 +124,43 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
 
         for record in records:
           try:
+            assert self._input_queue is not None
             await self._input_queue.put(record.id.record_id)
           except Exception as err:
-            print(f"Error enqueuing record id: {err}", file=sys.stderr)
+            pprint(f"Error enqueuing record id: {err}", file=sys.stderr)
 
         offset += len(records)
         if self.limit is not None and len(records) < self.limit:
           break
     finally:
       # Tell all workers to stop
+      assert self._input_queue is not None
       for _ in range(self.concurrency):
         await self._input_queue.put(None)
 
   async def _worker(self) -> None:
     try:
       while True:
+        assert self._input_queue is not None
         record_id = await self._input_queue.get()
         if record_id is None:
           break
         try:
           result = await self._fetch_attribute_values(record_id)
           if result is not None:
+            assert self._output_queue is not None
             await self._output_queue.put(result)
         except Exception as err:
-          print(f"Error in worker while fetching values: {err}", file=sys.stderr)
+          pprint(f"Error in worker while fetching values: {err}", file=sys.stderr)
     except Exception as err:
-      print(f"Worker crashed: {err}", file=sys.stderr)
+      pprint(f"Worker crashed: {err}", file=sys.stderr)
     finally:
+      assert self._output_queue is not None
       await self._output_queue.put(None)
 
-  async def _fetch_attribute_values(self, record_id: str) -> List[AttributeT] | None:
+  async def _fetch_attribute_values(
+    self, record_id: str
+  ) -> AttioAttributeFetcherResult[AttributeT] | None:
     try:
       async with self.semaphore:
         values = await self.attio_client.list_attribute_values(
@@ -145,7 +170,7 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
           attribute=self.attribute,
           show_historic=True,
         )
-        return values
+        return AttioAttributeFetcherResult(record_id=record_id, values=values)
     except Exception as err:
-      print(f"Error fetching attribute values: {err}", file=sys.stderr)
+      pprint(f"Error fetching attribute values: {err}", file=sys.stderr)
       return None

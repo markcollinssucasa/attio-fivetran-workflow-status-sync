@@ -8,8 +8,12 @@ from pprint import pprint
 from dotenv import load_dotenv
 from pathlib import Path
 from attio_client import AttioClient
-from types.attio_application import AttioApplicationRecord
-from types.attio_application_workflow_status_atttribute import AttioApplicationWorkflowStatusAttribute
+from attio_types.attio_application import AttioApplicationRecord
+from attio_types.attio_application_workflow_status_atttribute import (
+  AttioApplicationWorkflowStatusAttribute,
+)
+from attio_attribute_fetcher import AttioAttributeFetcher
+
 
 def _load_env_files() -> None:
   """Load environment variables from .env in project root and/or CWD."""
@@ -34,23 +38,19 @@ async def _async_main():
     return 2
 
   async with AttioClient(attio_token=attio_token) as attio_client:
-    values = await attio_client.query_records(
-      model=AttioApplicationRecord,
+    attio_attribute_fetcher = AttioAttributeFetcher(
+      attio_client=attio_client,
+      concurrency=10,
       parent_object="applications",
+      attribute="workflow_status",
+      record_model=AttioApplicationRecord,
+      attribute_model=AttioApplicationWorkflowStatusAttribute,
       filter={"workflow_status": {"active_from": {"$gt": "2025-08-22T00:00:00Z"}}},
-      limit=1,
-      offset=3,
+      limit=2,
     )
 
-    list_attribute_values = await attio_client.list_attribute_values(
-      model=AttioApplicationWorkflowStatusAttribute,
-      parent_object="applications",
-      record_id=values[0].id.record_id,
-      attribute="workflow_status",
-      show_historic=True,
-    )
-    serialized = [item.model_dump(mode="json") for item in list_attribute_values]
-    pprint(json.dumps(serialized, ensure_ascii=False))
+    async for result in attio_attribute_fetcher.stream_attribute_values():
+      print(result.record_id)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
