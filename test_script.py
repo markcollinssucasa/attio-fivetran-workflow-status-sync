@@ -2,25 +2,16 @@ import sys
 import asyncio
 from typing import Optional
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from attio_client import AttioClient
 from attio_types.attio_application import AttioApplicationRecord
 from attio_types.attio_application_workflow_status_atttribute import (
   AttioApplicationWorkflowStatusAttribute,
 )
 from attio_attribute_fetcher import AttioAttributeFetcher
-
-class Settings(BaseSettings):
-  ATTIO_API_TOKEN: Optional[str] = None
-  model_config = SettingsConfigDict(
-    env_file=".env",
-    env_file_encoding="utf-8",
-    extra="ignore",
-  )
-
-settings = Settings()
+from settings import Settings
 
 async def _async_main():
+  settings = Settings()
   attio_token = settings.ATTIO_API_TOKEN
   if not attio_token:
     print(

@@ -31,6 +31,19 @@ print('\n'.join(deps))
 PY
 )
 ```
+3. Generate requirements.txt (required for Fivetran deployments)
+Fivetran's Connector SDK expects a `requirements.txt` so it can install dependencies when you `deploy`.
+
+```bash
+# If you used uv
+uv export --format requirements-txt --no-hashes -o requirements.txt
+# (fallback)
+uv pip freeze > requirements.txt
+
+# If you used pip
+pip freeze > requirements.txt
+```
+Commit `requirements.txt` to version control.
 
 ### Quick smoke test (CLI)
 Print a few Attio application record IDs to verify auth and connectivity:
@@ -41,8 +54,22 @@ Notes:
 - `test_script.py` uses hardcoded filter/limit for a simple sanity check.
 - Ensure `ATTIO_API_TOKEN` is available in your shell or `.env`.
 
-### Running the connector locally (debug mode)
-Run the Fivetran connector loop once in debug mode:
+### Local runs and testing
+You can test locally either with the Fivetran Local Tester (recommended) or by running the script directly.
+
+Option A — Fivetran Local Tester (recommended):
+```bash
+pip install fivetran-connector-sdk
+fivetran debug
+# or include config
+# fivetran debug --configuration configuration.json
+```
+Notes:
+- Creates/updates a DuckDB file at `files/warehouse.db` with the tables written by the connector.
+- Prints a detailed log; a successful run ends with "Sync SUCCEEDED".
+- See the Fivetran Connector SDK Setup Guide for more details: [Connector SDK Setup Guide](https://fivetran.com/docs/connector-sdk/setup-guide)
+
+Option B — Direct Python run:
 ```bash
 python connector.py
 ```
@@ -59,6 +86,20 @@ What it does:
   - Page size `limit`: `50` (in `connector.py`) / `2` (in `main.py` demo)
   - Parent object: `applications`
   - Attribute: `workflow_status`
+
+### Fivetran deployment (optional)
+After testing locally, you can deploy this connector to Fivetran so it runs in your account.
+
+```bash
+# Ensure requirements.txt exists and is committed
+fivetran deploy \
+  --api-key <BASE_64_ENCODED_API_KEY> \
+  --destination <DESTINATION_NAME> \
+  --connection <CONNECTION_NAME>
+# Optionally include configuration
+# fivetran deploy --api-key <...> --destination <...> --connection <...> --configuration configuration.json
+```
+Then unpause/start the connection from the Fivetran UI or API. See the official guide for step‑by‑step details and examples: [Connector SDK Setup Guide](https://fivetran.com/docs/connector-sdk/setup-guide)
 
 ### Data model
 - Declared in `schema()` within `connector.py`:

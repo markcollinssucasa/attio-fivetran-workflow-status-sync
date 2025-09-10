@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timezone, timedelta
+from re import S
 from typing import Any
 
 from fivetran_connector_sdk import Connector
@@ -11,7 +12,8 @@ from attio_types.attio_application import AttioApplicationRecord
 from attio_types.attio_application_workflow_status_atttribute import (
   AttioApplicationWorkflowStatusAttribute,
 )
-from helpers import _get_env, _iso
+from helpers import _iso
+from settings import Settings
 from attio_attribute_fetcher import AttioAttributeFetcher
 
 
@@ -29,22 +31,35 @@ def schema(configuration: dict):
   ]
 
 
-async def _update(configuration: dict, state: dict):
-  token = _get_env("ATTIO_API_TOKEN")
+def _get_last_sync(state: dict) -> datetime|None:
 
-  now = datetime.now(timezone.utc)
-  raw_last_sync = state.get("last_sync")
-  if isinstance(raw_last_sync, str) and raw_last_sync:
+  raw_value = state.get("last_sync") if isinstance(state, dict) else None
+
+  if isinstance(raw_value, datetime):
+    return raw_value if raw_value.tzinfo else raw_value.replace(tzinfo=timezone.utc)
+
+  if isinstance(raw_value, str) and raw_value.strip():
+    text_value = raw_value.strip()
     try:
-      last_sync = datetime.fromisoformat(raw_last_sync)
+      try:
+        parsed = datetime.fromisoformat(text_value)
+      except ValueError:
+        parsed = datetime.fromisoformat(text_value.replace("Z", "+00:00"))
+      return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
     except Exception:
-      last_sync = now - timedelta(days=30)
-  elif isinstance(raw_last_sync, datetime):
-    last_sync = raw_last_sync
-  else:
-    last_sync = now - timedelta(days=30)
+      return None
 
+  return None
+
+
+async def _update(configuration: dict, state: dict):
+  settings = Settings()
+
+  now_utc = datetime.now(timezone.utc)
+  last_sync = _get_last_sync(state) or now_utc - timedelta(days=2)
+  
   last_sync_with_buffer = last_sync - timedelta(minutes=60)
+  logging.info(f"Starting update with last sync: {last_sync} and buffer: {last_sync_with_buffer}")
 
   attio_filter: dict[str, Any] = {}
   if last_sync is not None:
@@ -53,7 +68,7 @@ async def _update(configuration: dict, state: dict):
     }
 
   try:
-    async with AttioClient(attio_token=token) as client:
+    async with AttioClient(attio_token=settings.ATTIO_API_TOKEN) as client:
       attio_attribute_fetcher = AttioAttributeFetcher(
         attio_client=client,
         concurrency=10,
@@ -70,7 +85,7 @@ async def _update(configuration: dict, state: dict):
             table="attio_workflow_status",
             data=dict(
               application_id=rows.record_id,
-              workflow_status=[row.model_dump() for row in rows.values],
+              workflow_status={"history":[row.model_dump(mode="json") for row in rows.values]},
             ),
           )
         except Exception as err:
@@ -82,7 +97,7 @@ async def _update(configuration: dict, state: dict):
     raise
 
   try:
-    state["last_sync"] = str(now)
+    state["last_sync"] = str(now_utc)
     op.checkpoint(state=state)
   except Exception as err:
     logging.warning(f"Checkpoint failed: {err}")
