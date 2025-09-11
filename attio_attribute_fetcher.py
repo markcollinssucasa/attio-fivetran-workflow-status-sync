@@ -1,16 +1,17 @@
 import asyncio
-import sys
+import logging
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Dict, Generic, Type, TypeVar
 
 from pydantic import BaseModel
-from rich import print as pprint
 
 from attio_client import AttioClient
 from attio_types.attio_application import AttioApplicationRecord
 
 RecordT = TypeVar("RecordT", bound=AttioApplicationRecord)
 AttributeT = TypeVar("AttributeT", bound=BaseModel)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -127,7 +128,7 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
             assert self._input_queue is not None
             await self._input_queue.put(record.id.record_id)
           except Exception as err:
-            pprint(f"Error enqueuing record id: {err}", file=sys.stderr)
+            logger.debug("Error enqueuing record id: %s", err)
 
         offset += len(records)
         if self.limit is not None and len(records) < self.limit:
@@ -151,9 +152,9 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
             assert self._output_queue is not None
             await self._output_queue.put(result)
         except Exception as err:
-          pprint(f"Error in worker while fetching values: {err}", file=sys.stderr)
+          logger.debug("Worker fetch error: %s", err)
     except Exception as err:
-      pprint(f"Worker crashed: {err}", file=sys.stderr)
+      logger.debug("Worker crashed: %s", err)
     finally:
       assert self._output_queue is not None
       await self._output_queue.put(None)
@@ -172,5 +173,5 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
         )
         return AttioAttributeFetcherResult(record_id=record_id, values=values)
     except Exception as err:
-      pprint(f"Error fetching attribute values: {err}", file=sys.stderr)
+      logger.debug("Error fetching attribute values: %s", err)
       return None

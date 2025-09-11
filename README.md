@@ -45,14 +45,6 @@ pip freeze > requirements.txt
 ```
 Commit `requirements.txt` to version control.
 
-### Quick smoke test (CLI)
-Print a few Attio application record IDs to verify auth and connectivity:
-```bash
-python test_script.py
-```
-Notes:
-- `test_script.py` uses hardcoded filter/limit for a simple sanity check.
-- Ensure `ATTIO_API_TOKEN` is available in your shell or `.env`.
 
 ### Local runs and testing
 You can test locally either with the Fivetran Local Tester (recommended) or by running the script directly.
@@ -78,6 +70,50 @@ What it does:
 - Computes `last_sync` from connector state (defaults to now - 30 days, with a 60‑minute safety buffer).
 - Streams attribute values and upserts rows into `attio_workflow_status`.
 - Persists the updated state via `op.checkpoint`.
+
+### Testing (pytest)
+These tests make real API calls to Attio and validate shapes against the Pydantic models.
+
+Requirements:
+- `ATTIO_API_TOKEN` set in your environment or `.env` file
+- `pytest` installed locally (dev dependency)
+
+Commands:
+```bash
+pip install pytest
+pytest -q
+```
+Notes:
+- Tests will be skipped if `ATTIO_API_TOKEN` is missing, or if no records are found.
+- Tests assert types and nested shapes for `AttioApplicationWorkflowStatusAttribute` and JSON-serializability of `model_dump()`.
+ - You can override the tested object/attribute via env vars:
+   - `ATTIO_TEST_PARENT_OBJECT` (default: `applications`)
+   - `ATTIO_TEST_ATTRIBUTE` (default: `workflow_status`)
+
+Troubleshooting skipped tests:
+```bash
+# Show reasons for skipped tests
+pytest -q -rs
+
+# Ensure token is visible
+env | rg ATTIO | cat
+
+# Try narrower data set or different object/attribute
+ATTIO_TEST_PARENT_OBJECT=applications ATTIO_TEST_ATTRIBUTE=workflow_status pytest -q -rs
+```
+
+Using uv (no persistent dev install):
+```bash
+# Run pytest via uvx without modifying your environment
+uvx pytest -q
+
+# Or run inside your synced environment (if pytest is installed there)
+uv run -m pytest -q
+
+# If needed, install pytest into the current uv environment
+uv pip install pytest
+uv run -m pytest -q
+```
 
 ### Configuration
 - **Environment**: `ATTIO_API_TOKEN` (required)

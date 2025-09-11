@@ -16,6 +16,8 @@ dependencies = [
     "ruff>=0.12.10",
     "fivetran-connector-sdk>=2.0.1",
     "pydantic-settings>=2.10.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.1.0",
 ]
 
 [project.scripts]
