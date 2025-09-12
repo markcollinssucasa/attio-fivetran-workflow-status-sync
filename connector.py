@@ -21,6 +21,16 @@ def schema(configuration: dict):
     {
       "table": "attio_workflow_status",
       "primary_key": ["application_id"],
+      "columns": [
+        {
+          "name": "application_id",
+          "type": "string",
+        },
+        {
+          "name": "workflow_status",
+          "type": "json",
+        },
+      ],
     }
   ]
 

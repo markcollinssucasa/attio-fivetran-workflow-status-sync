@@ -21,6 +21,17 @@ class AttioAttributeFetcherResult[AttributeT]:
 
 
 class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
+  """Concurrent attribute fetcher for Attio records.
+
+  Implements a simple producer/worker pipeline with asyncio queues:
+  - Producer pages through records and enqueues record IDs
+  - Workers fetch attribute values concurrently and enqueue results
+  - The generator yields results as they arrive
+
+  Concurrency is bounded by the number of workers; request rate is limited by
+  the client's limiter.
+  """
+
   _concurrency: int
   _attio_client: AttioClient
   _parent_object: str
@@ -33,26 +44,15 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
   _output_queue: asyncio.Queue[AttioAttributeFetcherResult[AttributeT] | None] | None
   _is_running: bool
 
-  """Concurrent attribute fetcher for Attio records.
-
-  Implements a simple producer/worker pipeline with asyncio queues:
-  - Producer pages through records and enqueues record IDs
-  - Workers fetch attribute values concurrently and enqueue results
-  - The generator yields results as they arrive
-
-  Concurrency is bounded by the number of workers; request rate is limited by
-  the client's limiter.
-  """
-
   def __init__(
     self,
     attio_client: AttioClient,
-    concurrency: int,
     parent_object: str,
     attribute: str,
     record_model: Type[RecordT],
     attribute_model: Type[AttributeT],
     filter: Dict[str, Any],
+    concurrency: int = 5,
     limit: int = 50,
   ) -> None:
     self._attio_client = attio_client
@@ -67,7 +67,9 @@ class AttioAttributeFetcher(Generic[RecordT, AttributeT]):
     self._output_queue = None
     self._is_running = False
 
-  async def stream_attribute_values(self) -> AsyncGenerator[AttioAttributeFetcherResult[AttributeT], None]:
+  async def stream_attribute_values(
+    self,
+  ) -> AsyncGenerator[AttioAttributeFetcherResult[AttributeT], None]:
     """Stream lists of attribute values as they are fetched.
 
     Queue-based pipeline:

@@ -118,8 +118,8 @@ uv run -m pytest -q
 ### Configuration
 - **Environment**: `ATTIO_API_TOKEN` (required)
 - **Hardcoded parameters** (edit in code if needed):
-  - Concurrency: `10` (in `connector.py` and `main.py`)
-  - Page size `limit`: `50` (in `connector.py`) / `2` (in `main.py` demo)
+  - Concurrency: `5` (in `connector.py`)
+  - Page size `limit`: `50` (default in `AttioAttributeFetcher`; used by `connector.py`)
   - Parent object: `applications`
   - Attribute: `workflow_status`
 
@@ -131,10 +131,13 @@ After testing locally, you can deploy this connector to Fivetran so it runs in y
 fivetran deploy \
   --api-key <BASE_64_ENCODED_API_KEY> \
   --destination Snowflake \
-  --connection attio_application_workflow_status_sycn
+  --connection attio_application_workflow_status_sync
 # Optionally include configuration
 # fivetran deploy --api-key <...> --destination <...> --connection <...> --configuration configuration.json
 ```
+The destination is a per the name set up in Fivetran, which is Snowflake
+
+
 Then unpause/start the connection from the Fivetran UI or API. See the official guide for step‑by‑step details and examples: [Connector SDK Setup Guide](https://fivetran.com/docs/connector-sdk/setup-guide)
 
 ### Data model

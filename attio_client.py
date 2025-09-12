@@ -34,16 +34,23 @@ class AttioClient:
 
   BASE_URL = "https://api.attio.com/v2"
 
+  _base_url: str
+  _headers: Dict[str, str]
+  _timeout: httpx.Timeout
+  _rate_limit: AsyncLimiter
+  _client: Optional[httpx.AsyncClient]
+  _retry: Retry
+  _transport: RetryTransport
+
   def __init__(
     self,
-    *,
     attio_token: str,
     base_url: str = BASE_URL,
     timeout_seconds: float = 30.0,
-    rate_limit: int = 100,
+    rate_limit_per_window: int = 100,
     rate_limit_window_seconds: int = 30,
     max_retries: int = 3,
-    backoff_base: float = 0.5,  # seconds
+    backoff_base_seconds: float = 0.5,
   ) -> None:
     self._base_url = base_url.rstrip("/")
     self._headers = {
@@ -51,18 +58,17 @@ class AttioClient:
       "Content-Type": "application/json",
     }
     self._timeout = httpx.Timeout(timeout_seconds)  # can swap for granular if needed
-    self._rate_limit = AsyncLimiter(rate_limit, rate_limit_window_seconds)
-    self._client: Optional[httpx.AsyncClient] = None
+    self._rate_limit = AsyncLimiter(rate_limit_per_window, rate_limit_window_seconds)
+    self._client = None
     # Configure retries via httpx-retries
     self._retry = Retry(
       total=max_retries,
-      backoff_factor=backoff_base,
+      backoff_factor=backoff_base_seconds,
       backoff_jitter=0.1,
       status_forcelist=[429, 500, 502, 503, 504],
       allowed_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
     )
     self._transport = RetryTransport(retry=self._retry)
-    
 
   async def __aenter__(self) -> "AttioClient":
     self._client = httpx.AsyncClient(
