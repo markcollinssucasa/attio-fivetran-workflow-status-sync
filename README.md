@@ -130,8 +130,8 @@ After testing locally, you can deploy this connector to Fivetran so it runs in y
 # Ensure requirements.txt exists and is committed
 fivetran deploy \
   --api-key <BASE_64_ENCODED_API_KEY> \
-  --destination <DESTINATION_NAME> \
-  --connection <CONNECTION_NAME>
+  --destination Snowflake \
+  --connection attio_application_workflow_status_sycn
 # Optionally include configuration
 # fivetran deploy --api-key <...> --destination <...> --connection <...> --configuration configuration.json
 ```

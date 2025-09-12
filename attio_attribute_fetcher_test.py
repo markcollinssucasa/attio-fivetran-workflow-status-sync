@@ -11,7 +11,7 @@ from attio_types.attio_application_workflow_status_atttribute import (
 )
 from attio_attribute_fetcher import AttioAttributeFetcher
 from settings import Settings
-from helpers import _iso
+from helpers import convert_to_iso
 
 
 PARENT_OBJECT = os.getenv("ATTIO_TEST_PARENT_OBJECT", "applications")
@@ -27,7 +27,7 @@ def _require_token() -> str:
 
 def _recent_attio_filter(days: int = 1) -> dict:
   now = datetime.now()
-  return {ATTRIBUTE: {"active_from": {"$gt": _iso(now - timedelta(days=days))}}}
+  return {ATTRIBUTE: {"active_from": {"$gt": convert_to_iso(now - timedelta(days=days))}}}
 
 
 @pytest.mark.asyncio
