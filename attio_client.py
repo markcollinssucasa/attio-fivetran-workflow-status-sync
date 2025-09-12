@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from typing import Optional, Dict, Any, List, Type, TypeVar
-
-import asyncio
 import httpx
+from httpx_retries import RetryTransport, Retry
 from pydantic import BaseModel, ValidationError
+
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -49,12 +49,17 @@ class AttioClient:
     }
     self._timeout = httpx.Timeout(timeout_seconds)  # can swap for granular if needed
     self._client: Optional[httpx.AsyncClient] = None
-    self._transport = httpx.AsyncHTTPTransport(retries=0)  # we handle retries ourselves
-    self._max_retries = max_retries
-    self._backoff_base = backoff_base
+    # Configure retries via httpx-retries
+    self._retry = Retry(
+      total=max_retries,
+      backoff_factor=backoff_base,
+      backoff_jitter=0.1,
+      status_forcelist=[429, 500, 502, 503, 504],
+      allowed_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    )
+    self._transport = RetryTransport(retry=self._retry)
 
   async def __aenter__(self) -> "AttioClient":
-    # Prefer one lifecycle: context manager users get a single client
     self._client = httpx.AsyncClient(
       base_url=self._base_url,
       headers=self._headers,
@@ -72,7 +77,6 @@ class AttioClient:
       self._client = None
 
   def _ensure_client(self) -> httpx.AsyncClient:
-    # Optional: you can remove this to *force* context manager usage
     if self._client is None:
       self._client = httpx.AsyncClient(
         base_url=self._base_url,
@@ -86,35 +90,16 @@ class AttioClient:
     self, method: str, url: str, **kwargs
   ) -> httpx.Response:
     """
-    Retries on 429 and 5xx with exponential backoff.
-    For 429, honors Retry-After seconds if present.
+    Delegate retries to httpx-retries transport.
     """
     client = self._ensure_client()
-
-    attempt = 0
-    while True:
-      resp = await client.request(method, url, **kwargs)
-      if resp.status_code < 500 and resp.status_code != 429:
-        return resp
-
-      attempt += 1
-      if attempt > self._max_retries:
-        return resp
-
-      # Compute backoff
-      retry_after = resp.headers.get("Retry-After")
-      if retry_after and retry_after.isdigit():
-        delay = float(retry_after)
-      else:
-        delay = self._backoff_base * (2 ** (attempt - 1))
-
-      await asyncio.sleep(delay)
+    return await client.request(method, url, **kwargs)
 
   async def query_records(
     self,
     model: Type[TModel],
     parent_object: str,
-    query_filter: Optional[Dict[str, Any]] = None,
+    filter: Optional[Dict[str, Any]] = None,
     limit: int = 50,
     offset: int = 0,
     sort: Optional[List[Dict[str, Any]]] = None,
@@ -133,7 +118,7 @@ class AttioClient:
         list[model]
     """
     payload: Dict[str, Any] = {
-      "filter": query_filter or {},
+      "filter": filter or {},
       "limit": limit,
       "offset": offset,
     }
@@ -209,7 +194,7 @@ class AttioClient:
     self,
     model: Type[TModel],
     parent_object: str,
-    query_filter: Optional[Dict[str, Any]] = None,
+    filter: Optional[Dict[str, Any]] = None,
     sort: Optional[List[Dict[str, Any]]] = None,
     page_size: int = 200,
   ):
@@ -218,7 +203,7 @@ class AttioClient:
       page = await self.query_records(
         model=model,
         parent_object=parent_object,
-        query_filter=query_filter,
+        filter=filter,
         limit=page_size,
         offset=offset,
         sort=sort,

@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime, timezone, timedelta
-from re import S
 from typing import Any
 
 from fivetran_connector_sdk import Connector
@@ -17,11 +16,6 @@ from settings import Settings
 from attio_attribute_fetcher import AttioAttributeFetcher
 
 
-def validate_configuration(configuration: dict):
-  if "attio_api_token" not in configuration:
-    raise ValueError("Could not find 'attio_api_token'")
-
-
 def schema(configuration: dict):
   return [
     {
@@ -35,7 +29,7 @@ async def async_update(configuration: dict, state: dict):
   settings = Settings()
 
   now_utc = datetime.now(timezone.utc)
-  last_sync = get_last_sync(state) or now_utc - timedelta(days=2)
+  last_sync = get_last_sync(state) or now_utc - timedelta(days=30)
 
   last_sync_with_buffer = last_sync - timedelta(minutes=60)
   logging.info(
@@ -52,13 +46,12 @@ async def async_update(configuration: dict, state: dict):
     async with AttioClient(attio_token=settings.ATTIO_API_TOKEN) as client:
       attio_attribute_fetcher = AttioAttributeFetcher(
         attio_client=client,
-        concurrency=10,
+        concurrency=5,
         parent_object="applications",
         attribute="workflow_status",
         record_model=AttioApplicationRecord,
         attribute_model=AttioApplicationWorkflowStatusAttribute,
-        filter=attio_filter,
-        limit=50,
+        filter=attio_filter
       )
       async for rows in attio_attribute_fetcher.stream_attribute_values():
         try:

@@ -68,6 +68,9 @@ httpx==0.28.1
     # via
     #   attio-note-ai
     #   google-genai
+    #   httpx-retries
+httpx-retries==0.4.2
+    # via attio-note-ai
 idna==3.10
     # via
     #   anyio
