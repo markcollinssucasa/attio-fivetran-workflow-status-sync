@@ -1,5 +1,5 @@
-
 from datetime import datetime, timezone
+
 
 def convert_to_iso(dt: datetime) -> str:
   if dt.tzinfo is None:
@@ -7,9 +7,7 @@ def convert_to_iso(dt: datetime) -> str:
   return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-
-def get_last_sync(state: dict) -> datetime|None:
-
+def get_last_sync(state: dict) -> datetime | None:
   raw_value = state.get("last_sync") if isinstance(state, dict) else None
 
   if isinstance(raw_value, datetime):

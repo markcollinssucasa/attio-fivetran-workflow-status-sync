@@ -19,7 +19,4 @@ class AttioRecord(BaseModel):
 
 
 class AttioApplicationRecord(AttioRecord):
-
   model_config = ConfigDict(extra="ignore")  # ignore unexpected fields
-
-

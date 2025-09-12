@@ -51,7 +51,7 @@ async def async_update(configuration: dict, state: dict):
         attribute="workflow_status",
         record_model=AttioApplicationRecord,
         attribute_model=AttioApplicationWorkflowStatusAttribute,
-        filter=attio_filter
+        filter=attio_filter,
       )
       async for rows in attio_attribute_fetcher.stream_attribute_values():
         try:

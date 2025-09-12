@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Dict, Any, List, Type, TypeVar
 import httpx
 from httpx_retries import RetryTransport, Retry
+from aiolimiter import AsyncLimiter
 from pydantic import BaseModel, ValidationError
 
 
@@ -39,6 +40,8 @@ class AttioClient:
     attio_token: str,
     base_url: str = BASE_URL,
     timeout_seconds: float = 30.0,
+    rate_limit: int = 100,
+    rate_limit_window_seconds: int = 30,
     max_retries: int = 3,
     backoff_base: float = 0.5,  # seconds
   ) -> None:
@@ -48,6 +51,7 @@ class AttioClient:
       "Content-Type": "application/json",
     }
     self._timeout = httpx.Timeout(timeout_seconds)  # can swap for granular if needed
+    self._rate_limit = AsyncLimiter(rate_limit, rate_limit_window_seconds)
     self._client: Optional[httpx.AsyncClient] = None
     # Configure retries via httpx-retries
     self._retry = Retry(
@@ -58,6 +62,7 @@ class AttioClient:
       allowed_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
     )
     self._transport = RetryTransport(retry=self._retry)
+    
 
   async def __aenter__(self) -> "AttioClient":
     self._client = httpx.AsyncClient(
@@ -86,14 +91,19 @@ class AttioClient:
       )
     return self._client
 
-  async def _request_with_backoff(
+  async def _request_with_rate_limit(
     self, method: str, url: str, **kwargs
   ) -> httpx.Response:
     """
-    Delegate retries to httpx-retries transport.
+    Send an HTTP request under the shared AsyncLimiter.
+
+    Notes:
+    - Rate limiting is enforced via AsyncLimiter to smooth bursts and cap request rate.
+    - Retries and backoff for 429/5xx are handled by the configured RetryTransport.
     """
     client = self._ensure_client()
-    return await client.request(method, url, **kwargs)
+    async with self._rate_limit:
+      return await client.request(method, url, **kwargs)
 
   async def query_records(
     self,
@@ -125,7 +135,7 @@ class AttioClient:
     if sort is not None:
       payload["sort"] = sort
 
-    resp = await self._request_with_backoff(
+    resp = await self._request_with_rate_limit(
       "POST",
       f"/objects/{parent_object}/records/query",
       json=payload,
@@ -163,7 +173,7 @@ class AttioClient:
     List values for a record attribute, optionally including historic values.
     """
     params = {"show_historic": "true"} if show_historic else {}
-    resp = await self._request_with_backoff(
+    resp = await self._request_with_rate_limit(
       "GET",
       f"/objects/{parent_object}/records/{record_id}/attributes/{attribute}/values",
       params=params,

@@ -19,6 +19,7 @@ dependencies = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.1.0",
     "httpx-retries>=0.4.2",
+    "aiolimiter>=1.2.1",
 ]
 
 [project.scripts]

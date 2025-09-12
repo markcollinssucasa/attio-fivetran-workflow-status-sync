@@ -27,7 +27,9 @@ def _require_token() -> str:
 
 def _recent_attio_filter(days: int = 1) -> dict:
   now = datetime.now()
-  return {ATTRIBUTE: {"active_from": {"$gt": convert_to_iso(now - timedelta(days=days))}}}
+  return {
+    ATTRIBUTE: {"active_from": {"$gt": convert_to_iso(now - timedelta(days=days))}}
+  }
 
 
 @pytest.mark.asyncio
